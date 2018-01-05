@@ -13,12 +13,9 @@
 #include "networking.hpp"
 
 
-//#define DEBUG
-//#define DEBUG_TIME
 
-const int CAP_BOUND = 280;
+const int CAP_BOUND = 265;
 const float EPSILON = 0.01;
-const float EXP_CONST = 2.0;
 
 unsigned char get_nearest_direction(const hlt::Location &start_location, const hlt::Site &start_site,
                                     hlt::GameMap &present_map, unsigned char width, unsigned char height, unsigned char my_id)
@@ -29,7 +26,6 @@ unsigned char get_nearest_direction(const hlt::Location &start_location, const h
     {
         unsigned char dist = 0;
         unsigned char curr_direction = CARDINALS[i];
-        //hlt::Location curr_location = present_map.getLocation(start_location, curr_direction);
         hlt::Location curr_location = start_location;
         hlt::Site curr_site = start_site;
         while((curr_site.owner == my_id) && (dist < max_dist))
@@ -67,18 +63,17 @@ float compute_force (hlt::Location original_location, hlt::Site site, hlt::Locat
                 float neighbor_production = (float) neighbor_site.production;
                 float neighbor_strength = (float) neighbor_site.strength;
                 float neighbor_dist = present_map.getDistance(original_location, neighbor_loc);
-                float neighbor_val = (neighbor_strength ? (neighbor_production / neighbor_strength) : neighbor_production) / pow(neighbor_dist, EXP_CONST);
+                float neighbor_val = (neighbor_strength ? (neighbor_production / neighbor_strength) : neighbor_production) / (neighbor_dist * neighbor_dist * neighbor_dist * 1);
                 neighbor_force += neighbor_val;
                 num_neighbors++;
             }
         }
-        force = (((strength ? (production / strength) : production) / pow(dist, EXP_CONST)) + neighbor_force) / (num_neighbors + 1);
+        force = (((strength ? (production / strength) : production) / (dist * dist * dist * 1)) + neighbor_force) / (num_neighbors + 1);
 
     }
     else//that is, if owner is not in (0, myID)
     {
-        force = site.production / pow(dist, EXP_CONST) ;
-        //hlt::Site original_site = present_map.getSite(original_location);
+        force = site.production / (dist * dist * dist) ;
         for(int i = 0; i < 4; i++)
         {
             unsigned char dir = CARDINALS[i];
@@ -87,7 +82,7 @@ float compute_force (hlt::Location original_location, hlt::Site site, hlt::Locat
             if((neighbor_site.owner != 0) && (neighbor_site.owner != my_id))
             {
                 float neighbor_dist = present_map.getDistance(neighbor_loc, original_location);
-                float strength = (float) neighbor_site.strength / pow(neighbor_dist, EXP_CONST);
+                float strength = (float) neighbor_site.strength / (neighbor_dist * neighbor_dist * neighbor_dist);
                 force += strength;
             }
         }
@@ -238,15 +233,13 @@ unsigned char get_best_target_on_border_direction(hlt::Location &start_location,
         hlt::Site curr_site = present_map.getSite(curr_location);
 
         if((curr_site.owner == my_id) and is_on_border(curr_location, present_map, my_id))
-        //if((curr_site.owner == my_id))
         {
 
-            //if(reserved_own[curr_location] + reserved_own[start_location] < 255)
             if(reserved_own[curr_location] + start_site.strength < 255)
             {
                 float curr_distance = present_map.getDistance(curr_location, goal_location);
                 #ifdef DEBUG
-                    //output_file << "curr_distance: " << curr_distance << std::endl;
+                    output_file << "curr_distance: " << curr_distance << std::endl;
                 #endif // DEBUG
                 if(curr_distance < dist_start_goal)
                 {
@@ -288,41 +281,19 @@ unsigned char get_best_target_on_border_direction(hlt::Location &start_location,
     return best_direction;
 }
 
-float get_average_square_value(hlt::GameMap &present_map, unsigned char myID)
-{
-    int num = 0;
-    float val = 0.0;
-    for (unsigned short a = 0; a < present_map.height; a ++)
-    {
-        for (unsigned short b = 0; b < present_map.width; b ++)
-        {
-            hlt::Location curr_location = {b, a};
-            hlt::Site curr_site = present_map.getSite (curr_location, STILL);
-            if ((curr_site.owner == 0) && (curr_site.strength > 0))
-            {
-                val += static_cast<float>(curr_site.production) / static_cast<float>(curr_site.strength);
-                num++;
-            }
-        }
-    }
-    return (num > 0) ? (val / static_cast<float>(num)) : (0.0);
-}
-
 
 
 int main ()
 {
-	//std::ofstream fout;	fout.open ("fout.log");
 	std::ofstream output_file;
     output_file.open("output.txt");
 	srand (time (NULL));
-	//std::cout.sync_with_stdio (0);
 
 	unsigned char myID;
 	hlt::GameMap currMap;
 	std::set<hlt::Move> moveList;
 	getInit (myID, currMap);
-	sendInit ("my_c++_bot_v58");
+	sendInit ("my_c++_bot_v27_test");
 
 	int tick = 0;
 	std::map<hlt::Move, bool> prevMap;
@@ -330,7 +301,7 @@ int main ()
 	std::map<hlt::Location, int> reserved_enemy;
 	while(true)
 	{
-	    #ifdef DEBUG
+	    #ifdef DEBUG_TIME
             output_file << "=============================== " << tick << " =====================================" << std::endl;
         #endif // DEBUG
 		moveList.clear ();
@@ -340,29 +311,9 @@ int main ()
 		#ifdef DEBUG
 		    output_file << "best_target_on_border_location: " << best_target_on_border_location.x << ", " << best_target_on_border_location.y << std::endl;
 		#endif // DEBUG
-		float average_square_value = get_average_square_value(currMap, myID);
-
-
-
-		/*
-		if(tick == 0)
-        {
-            output_file << currMap.getAngle({0, 0}, {0, 10}) << ", " << sin(currMap.getAngle({0, 0}, {0, 10})) << ", " << cos(currMap.getAngle({0, 0}, {0, 10})) << std::endl;
-            output_file << currMap.getAngle({0, 0}, {10, 10}) << ", " << sin(currMap.getAngle({0, 0}, {10, 10})) << ", " << cos(currMap.getAngle({0, 0}, {10, 10})) << std::endl;
-            output_file << currMap.getAngle({0, 0}, {10, 0}) << ", " << sin(currMap.getAngle({0, 0}, {10, 0})) << ", " << cos(currMap.getAngle({0, 0}, {10, 0})) << std::endl;
-            output_file << currMap.getAngle({0, 0}, {10, -10}) << ", " << sin(currMap.getAngle({0, 0}, {10, -10})) << ", " << cos(currMap.getAngle({0, 0}, {10, -10})) << std::endl;
-            output_file << currMap.getAngle({0, 0}, {0, -10}) << ", " << sin(currMap.getAngle({0, 0}, {0, -10})) << ", " << cos(currMap.getAngle({0, 0}, {0, -10})) << std::endl;
-            output_file << currMap.getAngle({0, 0}, {-10, -10}) << ", " << sin(currMap.getAngle({0, 0}, {-10, -10})) << ", " << cos(currMap.getAngle({0, 0}, {-10, -10})) << std::endl;
-            output_file << currMap.getAngle({0, 0}, {-10, 0}) << ", " << sin(currMap.getAngle({0, 0}, {-10, 0})) << ", " << cos(currMap.getAngle({0, 0}, {-10, 0})) << std::endl;
-            output_file << currMap.getAngle({0, 0}, {-10, 10}) << ", " << sin(currMap.getAngle({0, 0}, {-10, 10})) << ", " << cos(currMap.getAngle({0, 0}, {-10, 10})) << std::endl;
-        }
-        */
-
-
 
 
 		std::set<hlt::Location> border;
-		//std::map<hlt::Move, bool> moveMap;
 		int myArea = 0;
 		for (unsigned short a = 0; a < currMap.height; a ++)
 		{
@@ -391,16 +342,6 @@ int main ()
 			}
 		}
 
-		/*
-		for (unsigned short a = 0; a < currMap.height; a ++)
-		{
-			for (unsigned short b = 0; b < currMap.width; b ++)
-			{
-			    output_file << "location: " << b << ", " << a << " -> " << static_cast<unsigned>(reserved_own[{b, a}]) << std::endl;
-			}
-		}
-		*/
-
 		for (unsigned short a = 0; a < currMap.height; a++)
 		{
 			for (unsigned short b = 0; b < currMap.width; b++)
@@ -414,7 +355,7 @@ int main ()
 
 				    #ifdef DEBUG
 				        output_file << "*************************************CURRENT SQUARE: " << b << ", " << a << std::endl;
-				        //output_file << "think_time: " << think_time.count() << std::endl;
+				        output_file << "think_time: " << think_time.count() << std::endl;
 				    #endif // DEBUG
 
 				    float force_x = 0.0;
@@ -437,19 +378,12 @@ int main ()
                         {
                             #ifdef DEBUG
                                 output_file << "IS NOT ON BORDER" << std::endl;
-                                //output_file << "site strength: " << static_cast<unsigned>(site.strength) << std::endl;
+                                output_file << "site strength: " << static_cast<unsigned>(site.strength) << std::endl;
                             #endif // DEBUG
                             for (std::set<hlt::Location>::iterator it = border.begin (); it != border.end (); it++)
                             {
-                            //for (unsigned short y = 0; y < currMap.height; y++)
-                            //{
-                                //for (unsigned short x = 0; x < currMap.width; x++)
-                                //{
                                 hlt::Site enemy_site = currMap.getSite (*it, STILL);
                                 hlt::Location enemy_location = *it;
-                                //hlt::Location enemy_location = {x, y};
-                                //hlt::Site enemy_site = currMap.getSite (enemy_location, STILL);
-                                //if(enemy_site.owner == 0)
                                 if(true)
                                 {
                                     float dist = currMap.getDistance(location, enemy_location);
@@ -458,7 +392,6 @@ int main ()
                                     force_x += force * cos(angle);
                                     force_y += force * sin(angle);
                                 }
-                                //}
                             }
                             direction = STILL;
 
@@ -579,8 +512,6 @@ int main ()
                                 #endif // DEBUG
                                 if((curr_val > max_val) && (reserved_enemy[curr_location] + site.strength < CAP_BOUND))
                                 {
-                                    //int local_val = (reserved_own.count(curr_site)) ? (curr_site.strength) : (reserved_own[curr_location]);
-                                    //if(local_val + )
                                     max_val = curr_val;
                                     direction = curr_direction;
                                     best_site = curr_site;
@@ -594,11 +525,10 @@ int main ()
                         }
                         #ifdef DEBUG
                             output_file << "info before: " << static_cast<unsigned>(site.strength) << ", " << static_cast<unsigned>(best_site.strength)
-                            << ", " << heuristic(best_site, best_location, currMap, myID) << ", " << static_cast<unsigned>(reserved_enemy[best_location]) << ", " <<
+                            << ", " << static_cast<unsigned>(reserved_enemy[best_location]) << ", " <<
                             reserved_enemy.count(best_location) << std::endl;
                         #endif // DEBUG
                         if((site.strength > best_site.strength) && (reserved_enemy[best_location] + site.strength < CAP_BOUND))
-                           //&& (heuristic(best_site, best_location, currMap, myID) > 1.0 * average_square_value))
                         {
                             #ifdef DEBUG
                                 output_file << "capture best target, dir: " << static_cast<unsigned>(direction) << std::endl;
@@ -623,84 +553,18 @@ int main ()
                             direction = get_best_target_on_border_direction(location, best_target_on_border_location, currMap,
                                                    myID, reserved_own, reserved_enemy, output_file);
                         }
-                        //direction = get_best_target_on_border_direction(location, best_target_on_border_location, currMap,
-                                                   //myID, reserved_own, reserved_enemy, output_file);
-                        //output_file << "info after: " << static_cast<unsigned>(site.strength) << ", " << static_cast<unsigned>(best_site.strength)
-                            //<< ", " << static_cast<unsigned>(reserved_enemy[best_location]) << ", " <<
-                            //reserved_enemy.count(best_location) << std::endl;
-
-                        /*
-                        for (unsigned short y = 0; y < currMap.height; y++)
-                        {
-                            for (unsigned short x = 0; x < currMap.width; x++)
-                            {
-                                hlt::Location enemy_location = {x, y};
-                                hlt::Site enemy_site = currMap.getSite (enemy_location, STILL);
-                                if(enemy_site.owner == 0)
-                                {
-                                    float dist = currMap.getDistance(location, enemy_location);
-                                    float angle = currMap.getAngle(location, enemy_location);
-                                    float force = compute_force(enemy_site, enemy_location, currMap, dist, myArea);
-                                    force_x += force * cos(angle);
-                                    force_y += force * sin(angle);
-                                }
-                            }
-                        }
-                        direction = STILL;
-                        if (force_x + force_y > 0 && force_x - force_y > 0)
-                        {
-                            direction = EAST;
-                            reserved_own[location] = 0;
-                        }
-                        else if (force_x + force_y > 0 && force_x - force_y < 0)
-                        {
-                            direction = SOUTH;
-                            reserved_own[location] = 0;
-                        }
-                        else if (force_x + force_y < 0 && force_x - force_y < 0)
-                        {
-                            direction = WEST;
-                            reserved_own[location] = 0;
-                        }
-                        else if (force_x + force_y < 0 && force_x - force_y > 0)
-                        {
-                            direction = NORTH;
-                            reserved_own[location] = 0;
-                        }
-                        */
+                        
                     }
 
-                    //hlt::Site currSite = currMap.getSite (location, STILL);
-                    //hlt::Site nextSite = currMap.getSite (location, direction);
-
-					//if((currSite.strength < 5 * currSite.production) || (currSite.strength <= nextSite.strength))
-					//{
-					    //direction = STILL;
-					//}
-
-					//if (myArea <= 16 && currSite.strength <= 8 || myArea > 16 && currSite.strength <= 16) continue; // let small pieces be resting ans growing
-					//if (nextSite.owner != myID && currSite.strength <= nextSite.strength)
-					//{
-						// change direction to merge and attack
-							 //if (currMap.getSite ({b, a}, (direction + 0) & 0x3 + 1).owner == myID) direction = (direction + 0) & 0x3 + 1;
-						//else if (currMap.getSite ({b, a}, (direction + 2) & 0x3 + 1).owner == myID) direction = (direction + 2) & 0x3 + 1;
-						//else continue; // avoid death move
-					//}
-					//hlt::Move revMove = {currMap.getLocation ({b, a}, direction), (unsigned char) ((direction + 1) & 0x3 + 1)};
-					//if (myArea <= 16 && moveMap[revMove] == 1) continue; // avoid double oscillation
-					//if (myArea <= 16 && prevMap[revMove] == 1) direction = (direction + 1) & 0x3 + 1; // avoid single oscillation
 
 					hlt::Move move = {{b, a}, direction};
 					moveList.insert (move);
-					//moveMap[move] = 1;
 				}
 				std::chrono::high_resolution_clock::time_point end = std::chrono::high_resolution_clock::now();
-				//std::chrono::duration<double, std::milli> local_think_time = (end - start);
 				think_time += (end - start);
 			}
 		}
 		tick++;
-		//prevMap = moveMap;
 		sendFrame (moveList);
 	}
 	output_file.close();
